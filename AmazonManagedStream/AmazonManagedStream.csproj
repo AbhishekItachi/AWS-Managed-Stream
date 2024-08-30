@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Amazon.CDK.AWS.IAM" Version="1.204.0" />
     <PackageReference Include="AWS.MSK.Auth" Version="1.0.0" />
     <PackageReference Include="AWSSDK.Kafka" Version="3.7.400.6" />
     <PackageReference Include="AWSSDK.KafkaConnect" Version="3.7.400.6" />

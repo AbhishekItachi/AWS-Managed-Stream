@@ -13,13 +13,13 @@ using System.Threading.Tasks;
 
 namespace AmazonManagedStream
 {
-    public class KafkaService
+    public class KafkaProducerService
     {
         private readonly string accessKeyId;
         private readonly string secretAccessKey;
         private readonly string bootStrapServer;
 
-        public KafkaService(IConfiguration configuration)
+        public KafkaProducerService(IConfiguration configuration)
         {
             accessKeyId = configuration["AccessKey"];
             secretAccessKey = configuration["SecretAccessKey"];
@@ -56,14 +56,21 @@ namespace AmazonManagedStream
                                 .SetOAuthBearerTokenRefreshHandler(OauthCallback).Build();
             try
             {
-                var deliveryReport = await producer.ProduceAsync("test-topic", new Message<string, string> { Value = "Hello from .NET" });
+                int i = 0;
+                while (true)
+                {
+                    i = i++;
+                    var deliveryReport = await producer.ProduceAsync("test-topic", new Message<string, string> { Value = "Hello from .NET" + i });
 
-                Console.WriteLine($"Produced message to {deliveryReport.TopicPartitionOffset}");
+                    Console.WriteLine($"Produced message to {deliveryReport.TopicPartitionOffset}");
+                }
             }
             catch (ProduceException<string, string> e)
             {
                 Console.WriteLine($"failed to deliver message: {e.Message} [{e.Error.Code}]");
             }
+            catch (Exception e) { }
+        
         }
 
         private async Task<SessionAWSCredentials> GetsessionCredentialsAsync()

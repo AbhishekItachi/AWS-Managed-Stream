@@ -12,7 +12,7 @@ try
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("settings.json") // Load test settings from .json file.
             .Build();
-    KafkaService kafkaService = new KafkaService(configuration);
+    KafkaProducerService kafkaService = new KafkaProducerService(configuration);
     await kafkaService.KafkaConfiguration();
 }
 catch (Exception ex)

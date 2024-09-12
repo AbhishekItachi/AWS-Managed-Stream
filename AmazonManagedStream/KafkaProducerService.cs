@@ -100,11 +100,6 @@ namespace AmazonManagedStream
 
         public async Task KafkaProducer()
         {
-
-
-
-
-
             var producerConfig = new ProducerConfig
             {
                 BootstrapServers = bootStrapServer,
@@ -135,7 +130,7 @@ namespace AmazonManagedStream
                 {
                     //string message = Console.ReadLine();
 
-                    var deliveryReport = await producer.ProduceAsync("demo-topic-test-2", new Message<string, string> { Value = "default message" });
+                    var deliveryReport = await producer.ProduceAsync(topicName, new Message<string, string> { Value = "default message" });
 
                     Console.WriteLine($"Produced message to {deliveryReport.TopicPartitionOffset}");
                 }

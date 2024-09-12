@@ -8,6 +8,7 @@ using Amazon.SecurityToken.Model;
 using AWS.MSK.Auth;
 using Confluent.Kafka;
 using Confluent.Kafka.Admin;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using System.Net;
 
@@ -23,7 +24,9 @@ namespace AmazonManagedStream
         private readonly short replicationFactor;
         private readonly int partitions;
         private SessionAWSCredentials sessionAWSCredentials;
-        public KafkaProducerService(IConfiguration configuration)
+        private readonly IMemoryCache _memoryCache;
+        private readonly string tokenKey = "aws-iam-token";
+        public KafkaProducerService(IConfiguration configuration, IMemoryCache memoryCache)
         {
             accessKeyId = configuration["AccessKey"];
             secretAccessKey = configuration["SecretAccessKey"];
@@ -31,6 +34,7 @@ namespace AmazonManagedStream
             topicName = configuration["Topic"];
             replicationFactor = Convert.ToInt16(configuration["ReplicationFactor"]);
             partitions = Convert.ToInt32(configuration["Partitions"]);
+            _memoryCache = memoryCache;
             GetsessionCredentialsAsync().GetAwaiter().GetResult();
             CreateKafkaConfigruations().GetAwaiter().GetResult();
             CreatekafkaTopicIfNotExists().GetAwaiter().GetResult();
@@ -40,9 +44,15 @@ namespace AmazonManagedStream
         {
             try
             {
-                AWSMSKAuthTokenGenerator mskAuthTokenGenerator = new AWSMSKAuthTokenGenerator();
-                var (token, expiryMs) = mskAuthTokenGenerator.GenerateAuthTokenFromCredentialsProviderAsync(() => sessionAWSCredentials, Amazon.RegionEndpoint.EUWest2).Result;
-                client.OAuthBearerSetToken(token, expiryMs, "");
+                long timeValue = 0;
+                if (!_memoryCache.TryGetValue(tokenKey, out string? token) || token == null)
+                {
+                    //long 
+                    AWSMSKAuthTokenGenerator mskAuthTokenGenerator = new AWSMSKAuthTokenGenerator();
+                    (token, timeValue) = mskAuthTokenGenerator.GenerateAuthTokenFromCredentialsProviderAsync(() => sessionAWSCredentials, Amazon.RegionEndpoint.EUWest2).Result;
+                    _memoryCache.Set(tokenKey, token, TimeSpan.FromSeconds(timeValue - 60));
+                }
+                client.OAuthBearerSetToken(token, timeValue, "");
             }
             catch (Exception e)
             {
@@ -75,17 +85,25 @@ namespace AmazonManagedStream
 
                 try
                 {
-                    var topicSpecification = new TopicSpecification
+                    if (!topicNames.Exists(x => x.Equals(topicName)))
                     {
-                        Name = topicName,
-                        NumPartitions = partitions,
-                        ReplicationFactor = replicationFactor
-                    };
+                        var topicSpecification = new TopicSpecification
+                        {
+                            Name = topicName,
+                            NumPartitions = partitions,
+                            ReplicationFactor = replicationFactor
+                        };
 
 
-                    await adminClient.CreateTopicsAsync(new[] { topicSpecification });
+                        await adminClient.CreateTopicsAsync(new[] { topicSpecification });
 
-                    Console.WriteLine("Topic created successfully.");
+                        Console.WriteLine("Topic created successfully.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("Topic already exists.");
+                    }
+
                 }
                 catch (CreateTopicsException e)
                 {

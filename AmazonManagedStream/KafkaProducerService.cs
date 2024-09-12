@@ -1,4 +1,7 @@
 ﻿using Amazon;
+using Amazon.Kafka;
+using Amazon.Kafka.Model;
+using Amazon.KafkaConnect;
 using Amazon.Runtime;
 using Amazon.SecurityToken;
 using Amazon.SecurityToken.Model;
@@ -14,17 +17,94 @@ namespace AmazonManagedStream
     {
         private readonly string accessKeyId;
         private readonly string secretAccessKey;
-        private readonly string bootStrapServer;
-
+        private string bootStrapServer;
+        private readonly string clusterArn;
+        private readonly string topicName;
+        private readonly short replicationFactor;
+        private readonly int partitions;
+        private SessionAWSCredentials sessionAWSCredentials;
         public KafkaProducerService(IConfiguration configuration)
         {
             accessKeyId = configuration["AccessKey"];
             secretAccessKey = configuration["SecretAccessKey"];
-            bootStrapServer = configuration["BootstrapServers"];
+            clusterArn = configuration["ClusterArn"];
+            topicName = configuration["Topic"];
+            replicationFactor = Convert.ToInt16(configuration["ReplicationFactor"]);
+            partitions = Convert.ToInt32(configuration["Partitions"]);
+            GetsessionCredentialsAsync().GetAwaiter().GetResult();
+            CreateKafkaConfigruations().GetAwaiter().GetResult();
+            CreatekafkaTopicIfNotExists().GetAwaiter().GetResult();
         }
 
-        public async Task KafkaConfiguration()
+        private void OauthCallback(IClient client, string cfg)
         {
+            try
+            {
+                AWSMSKAuthTokenGenerator mskAuthTokenGenerator = new AWSMSKAuthTokenGenerator();
+                var (token, expiryMs) = mskAuthTokenGenerator.GenerateAuthTokenFromCredentialsProviderAsync(() => sessionAWSCredentials, Amazon.RegionEndpoint.EUWest2).Result;
+                client.OAuthBearerSetToken(token, expiryMs, "");
+            }
+            catch (Exception e)
+            {
+                client.OAuthBearerSetTokenFailure(e.ToString());
+            }
+        }
+        private async Task CreateKafkaConfigruations()
+        {
+            GetBootstrapBrokersRequest getBootstrapBrokersRequest = new();
+            getBootstrapBrokersRequest.ClusterArn = clusterArn;
+
+            AmazonKafkaClient amazonKafkaClient = new(sessionAWSCredentials, Amazon.RegionEndpoint.EUWest2);
+            GetBootstrapBrokersResponse response = await amazonKafkaClient.GetBootstrapBrokersAsync(getBootstrapBrokersRequest);
+            bootStrapServer = response.BootstrapBrokerStringPublicSaslIam;
+        }
+        private async Task CreatekafkaTopicIfNotExists()
+        {
+            var adminClientConfig = new AdminClientConfig
+            {
+                BootstrapServers = bootStrapServer,
+                SecurityProtocol = SecurityProtocol.SaslSsl,
+                SaslMechanism = SaslMechanism.OAuthBearer
+            };
+
+            using (var adminClient = new AdminClientBuilder(adminClientConfig).SetOAuthBearerTokenRefreshHandler(OauthCallback).Build())
+            {
+                var metadata = adminClient.GetMetadata(TimeSpan.FromSeconds(10));
+                var topicsMetadata = metadata.Topics;
+                var topicNames = metadata.Topics.Select(a => a.Topic).ToList();
+
+                try
+                {
+                    var topicSpecification = new TopicSpecification
+                    {
+                        Name = topicName,
+                        NumPartitions = partitions,
+                        ReplicationFactor = replicationFactor
+                    };
+
+
+                    await adminClient.CreateTopicsAsync(new[] { topicSpecification });
+
+                    Console.WriteLine("Topic created successfully.");
+                }
+                catch (CreateTopicsException e)
+                {
+                    Console.WriteLine($"An error occurred creating topic: {e.Results[0].Error.Reason}");
+                }
+                catch (Exception e)
+                {
+
+                }
+            }
+        }
+
+        public async Task KafkaProducer()
+        {
+
+
+
+
+
             var producerConfig = new ProducerConfig
             {
                 BootstrapServers = bootStrapServer,
@@ -32,8 +112,7 @@ namespace AmazonManagedStream
                 SaslMechanism = SaslMechanism.OAuthBearer
             };
 
-            Func<SessionAWSCredentials> tempCredentials = () => GetsessionCredentialsAsync().Result;
-            AWSMSKAuthTokenGenerator mskAuthTokenGenerator = new AWSMSKAuthTokenGenerator();
+            //Func<SessionAWSCredentials> tempCredentials = () => sessionAWSCredentials;
             var config = new AdminClientConfig
             {
                 BootstrapServers = bootStrapServer,
@@ -44,28 +123,19 @@ namespace AmazonManagedStream
                 //SaslPassword = secretAccessKey
             };
             // Callback to handle OAuth bearer token refresh.
-            void OauthCallback(IClient client, string cfg)
-            {
-                try
-                {
-                    var (token, expiryMs) = mskAuthTokenGenerator.GenerateAuthTokenFromCredentialsProviderAsync(tempCredentials, Amazon.RegionEndpoint.EUWest2).Result;
-                    client.OAuthBearerSetToken(token, expiryMs, "");
-                }
-                catch (Exception e)
-                {
-                    client.OAuthBearerSetTokenFailure(e.ToString());
-                }
-            }
+
 
             var producer = new ProducerBuilder<string, string>(producerConfig)
                                 .SetOAuthBearerTokenRefreshHandler(OauthCallback).Build();
+
             try
             {
                 int i = 0;
                 while (true)
                 {
-                    i++;
-                    var deliveryReport = await producer.ProduceAsync("demo-topic-test-2", new Message<string, string> { Value = "Hello from .NET " + i });
+                    //string message = Console.ReadLine();
+
+                    var deliveryReport = await producer.ProduceAsync("demo-topic-test-2", new Message<string, string> { Value = "default message" });
 
                     Console.WriteLine($"Produced message to {deliveryReport.TopicPartitionOffset}");
                 }
@@ -84,7 +154,7 @@ namespace AmazonManagedStream
             }
         }
 
-        private async Task<SessionAWSCredentials> GetsessionCredentialsAsync()
+        private async Task GetsessionCredentialsAsync()
         {
             using (var stsClient = new AmazonSecurityTokenServiceClient(accessKeyId, secretAccessKey))
             {
@@ -97,10 +167,9 @@ namespace AmazonManagedStream
 
                 Credentials credentials = sessionTokenResponse.Credentials;
 
-                var sessionCredentials = new SessionAWSCredentials(credentials.AccessKeyId,
+                sessionAWSCredentials = new SessionAWSCredentials(credentials.AccessKeyId,
                                                                   credentials.SecretAccessKey,
                                                                   credentials.SessionToken);
-                return sessionCredentials;
             }
         }
     }

@@ -13,7 +13,7 @@ try
             .AddJsonFile("settings.json") // Load test settings from .json file.
             .Build();
     KafkaProducerService kafkaService = new KafkaProducerService(configuration);
-    await kafkaService.KafkaConfiguration();
+    await kafkaService.KafkaProducer();
 }
 catch (Exception ex)
 {

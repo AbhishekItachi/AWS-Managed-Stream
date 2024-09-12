@@ -47,10 +47,10 @@ namespace AmazonManagedStream
                 long timeValue = 0;
                 if (!_memoryCache.TryGetValue(tokenKey, out string? token) || token == null)
                 {
-                    //long 
+                    long currentTime = DateTime.UtcNow.ToUnixTimeMilliSeconds();
                     AWSMSKAuthTokenGenerator mskAuthTokenGenerator = new AWSMSKAuthTokenGenerator();
                     (token, timeValue) = mskAuthTokenGenerator.GenerateAuthTokenFromCredentialsProviderAsync(() => sessionAWSCredentials, Amazon.RegionEndpoint.EUWest2).Result;
-                    _memoryCache.Set(tokenKey, token, TimeSpan.FromSeconds(timeValue - 60));
+                    _memoryCache.Set(tokenKey, token, TimeSpan.FromSeconds(timeValue - (currentTime + 60000)));
                 }
                 client.OAuthBearerSetToken(token, timeValue, "");
             }
@@ -68,6 +68,7 @@ namespace AmazonManagedStream
             GetBootstrapBrokersResponse response = await amazonKafkaClient.GetBootstrapBrokersAsync(getBootstrapBrokersRequest);
             bootStrapServer = response.BootstrapBrokerStringPublicSaslIam;
         }
+
         private async Task CreatekafkaTopicIfNotExists()
         {
             var adminClientConfig = new AdminClientConfig

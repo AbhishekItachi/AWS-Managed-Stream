@@ -23,10 +23,7 @@ namespace AmazonManagedStream
         private readonly string topicName;
         private readonly short replicationFactor;
         private readonly int partitions;
-        private SessionAWSCredentials sessionAWSCredentials;
-        private readonly IMemoryCache _memoryCache;
-        private readonly string tokenKey = "aws-iam-token";
-        public KafkaProducerService(IConfiguration configuration, IMemoryCache memoryCache)
+        public KafkaProducerService(IConfiguration configuration)
         {
             accessKeyId = configuration["AccessKey"];
             secretAccessKey = configuration["SecretAccessKey"];
@@ -34,8 +31,7 @@ namespace AmazonManagedStream
             topicName = configuration["Topic"];
             replicationFactor = Convert.ToInt16(configuration["ReplicationFactor"]);
             partitions = Convert.ToInt32(configuration["Partitions"]);
-            _memoryCache = memoryCache;
-            //GetsessionCredentialsAsync().GetAwaiter().GetResult();
+            GetsessionCredentialsAsync().GetAwaiter().GetResult();
             CreateKafkaConfigruations().GetAwaiter().GetResult();
             CreatekafkaTopicIfNotExists().GetAwaiter().GetResult();
         }
@@ -45,13 +41,9 @@ namespace AmazonManagedStream
             try
             {
                 long timeValue = 0;
-                //if (!_memoryCache.TryGetValue(tokenKey, out string? token) || token == null)
-                //{
-                    long currentTime = DateTime.UtcNow.ToUnixTimeMilliSeconds();
-                    AWSMSKAuthTokenGenerator mskAuthTokenGenerator = new AWSMSKAuthTokenGenerator();
-                    (var token, timeValue) = mskAuthTokenGenerator.GenerateAuthTokenFromCredentialsProviderAsync(() => GetsessionCredentialsAsync().Result, Amazon.RegionEndpoint.EUWest2).Result;
-                    //_memoryCache.Set(tokenKey, token, TimeSpan.FromSeconds(timeValue - (currentTime + 60000)));
-                //}
+                long currentTime = DateTime.UtcNow.ToUnixTimeMilliSeconds();
+                AWSMSKAuthTokenGenerator mskAuthTokenGenerator = new AWSMSKAuthTokenGenerator();
+                (var token, timeValue) = mskAuthTokenGenerator.GenerateAuthTokenFromCredentialsProviderAsync(() => GetsessionCredentialsAsync().Result, Amazon.RegionEndpoint.EUWest2).Result;
                 client.OAuthBearerSetToken(token, timeValue, "");
             }
             catch (Exception e)
@@ -64,7 +56,7 @@ namespace AmazonManagedStream
             GetBootstrapBrokersRequest getBootstrapBrokersRequest = new();
             getBootstrapBrokersRequest.ClusterArn = clusterArn;
 
-            AmazonKafkaClient amazonKafkaClient = new(sessionAWSCredentials, Amazon.RegionEndpoint.EUWest2);
+            AmazonKafkaClient amazonKafkaClient = new(GetsessionCredentialsAsync().Result, Amazon.RegionEndpoint.EUWest2);
             GetBootstrapBrokersResponse response = await amazonKafkaClient.GetBootstrapBrokersAsync(getBootstrapBrokersRequest);
             bootStrapServer = response.BootstrapBrokerStringPublicSaslIam;
         }
@@ -181,7 +173,7 @@ namespace AmazonManagedStream
 
                 Credentials credentials = sessionTokenResponse.Credentials;
 
-                sessionAWSCredentials = new SessionAWSCredentials(credentials.AccessKeyId,
+                var sessionAWSCredentials = new SessionAWSCredentials(credentials.AccessKeyId,
                                                                   credentials.SecretAccessKey,
                                                                   credentials.SessionToken);
                 return sessionAWSCredentials;

@@ -35,7 +35,7 @@ namespace AmazonManagedStream
             replicationFactor = Convert.ToInt16(configuration["ReplicationFactor"]);
             partitions = Convert.ToInt32(configuration["Partitions"]);
             _memoryCache = memoryCache;
-            GetsessionCredentialsAsync().GetAwaiter().GetResult();
+            //GetsessionCredentialsAsync().GetAwaiter().GetResult();
             CreateKafkaConfigruations().GetAwaiter().GetResult();
             CreatekafkaTopicIfNotExists().GetAwaiter().GetResult();
         }
@@ -45,13 +45,13 @@ namespace AmazonManagedStream
             try
             {
                 long timeValue = 0;
-                if (!_memoryCache.TryGetValue(tokenKey, out string? token) || token == null)
-                {
+                //if (!_memoryCache.TryGetValue(tokenKey, out string? token) || token == null)
+                //{
                     long currentTime = DateTime.UtcNow.ToUnixTimeMilliSeconds();
                     AWSMSKAuthTokenGenerator mskAuthTokenGenerator = new AWSMSKAuthTokenGenerator();
-                    (token, timeValue) = mskAuthTokenGenerator.GenerateAuthTokenFromCredentialsProviderAsync(() => sessionAWSCredentials, Amazon.RegionEndpoint.EUWest2).Result;
-                    _memoryCache.Set(tokenKey, token, TimeSpan.FromSeconds(timeValue - (currentTime + 60000)));
-                }
+                    (var token, timeValue) = mskAuthTokenGenerator.GenerateAuthTokenFromCredentialsProviderAsync(() => GetsessionCredentialsAsync().Result, Amazon.RegionEndpoint.EUWest2).Result;
+                    //_memoryCache.Set(tokenKey, token, TimeSpan.FromSeconds(timeValue - (currentTime + 60000)));
+                //}
                 client.OAuthBearerSetToken(token, timeValue, "");
             }
             catch (Exception e)
@@ -168,7 +168,7 @@ namespace AmazonManagedStream
             }
         }
 
-        private async Task GetsessionCredentialsAsync()
+        private async Task<SessionAWSCredentials> GetsessionCredentialsAsync()
         {
             using (var stsClient = new AmazonSecurityTokenServiceClient(accessKeyId, secretAccessKey))
             {
@@ -184,6 +184,7 @@ namespace AmazonManagedStream
                 sessionAWSCredentials = new SessionAWSCredentials(credentials.AccessKeyId,
                                                                   credentials.SecretAccessKey,
                                                                   credentials.SessionToken);
+                return sessionAWSCredentials;
             }
         }
     }

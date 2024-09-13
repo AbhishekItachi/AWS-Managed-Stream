@@ -1,7 +1,6 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using Amazon.Kafka.Model;
 using AmazonManagedStream;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 
 
@@ -13,8 +12,7 @@ try
             .SetBasePath(Directory.GetCurrentDirectory())
             .AddJsonFile("settings.json") // Load test settings from .json file.
             .Build();
-    IMemoryCache cache = new MemoryCache(new MemoryCacheOptions());
-    KafkaProducerService kafkaService = new KafkaProducerService(configuration, cache);
+    KafkaProducerService kafkaService = new KafkaProducerService(configuration);
     await kafkaService.KafkaProducer();
 }
 catch (Exception ex)

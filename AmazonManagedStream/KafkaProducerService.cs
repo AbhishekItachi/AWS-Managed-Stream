@@ -15,17 +15,17 @@ namespace AmazonManagedStream
     {
         private readonly string accessKeyId;
         private readonly string secretAccessKey;
-        private string bootStrapServer;
+        private string? bootStrapServer;
         private readonly string clusterArn;
         private readonly string topicName;
         private readonly short replicationFactor;
         private readonly int partitions;
         public KafkaProducerService(IConfiguration configuration)
         {
-            accessKeyId = configuration["AccessKey"];
-            secretAccessKey = configuration["SecretAccessKey"];
-            clusterArn = configuration["ClusterArn"];
-            topicName = configuration["Topic"];
+            accessKeyId = configuration["AccessKey"]!;
+            secretAccessKey = configuration["SecretAccessKey"]!;
+            clusterArn = configuration["ClusterArn"]!;
+            topicName = configuration["Topic"]!;
             replicationFactor = Convert.ToInt16(configuration["ReplicationFactor"]);
             partitions = Convert.ToInt32(configuration["Partitions"]);
             GetsessionCredentialsAsync().GetAwaiter().GetResult();
@@ -67,6 +67,7 @@ namespace AmazonManagedStream
                 SaslMechanism = SaslMechanism.OAuthBearer
             };
 
+            string[] topics = { "topic-1", "topic-2" };
             using (var adminClient = new AdminClientBuilder(adminClientConfig).SetOAuthBearerTokenRefreshHandler(OauthCallback).Build())
             {
                 var metadata = adminClient.GetMetadata(TimeSpan.FromSeconds(10));
@@ -75,32 +76,32 @@ namespace AmazonManagedStream
 
                 try
                 {
-                    if (!topicNames.Exists(x => x.Equals(topicName)))
+                    for(int i = 0; i < topics.Length; i++) 
                     {
-                        var topicSpecification = new TopicSpecification
+                        if (!topicNames.Exists(x => x.Equals(topics[i])))
                         {
-                            Name = topicName,
-                            NumPartitions = partitions,
-                            ReplicationFactor = replicationFactor
-                        };
-
-
-                        await adminClient.CreateTopicsAsync(new[] { topicSpecification });
-
-                        Console.WriteLine("Topic created successfully.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("Topic already exists.");
+                            var topicSpecification = new TopicSpecification
+                            {
+                                Name = topics[i],
+                                NumPartitions = partitions,
+                                ReplicationFactor = replicationFactor
+                            };
+                            await adminClient.CreateTopicsAsync(new[] { topicSpecification });
+                            Console.WriteLine($"Topic created successfully: {topics[i]}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Topic already exists: {topics[i]}");
+                        }
                     }
                 }
                 catch (CreateTopicsException e)
                 {
-                    Console.WriteLine($"An error occurred creating topic: {e.Results[0].Error.Reason}");
+                    Console.WriteLine($"A CreateTopicsException occurred creating topic: {e.Results[0].Error.Reason}");
                 }
                 catch (Exception e)
                 {
-
+                    Console.WriteLine($"A general error occurred creating topic: {e}");
                 }
             }
         }
@@ -127,7 +128,6 @@ namespace AmazonManagedStream
 
             try
             {
-                int i = 0;
                 string guid = Guid.NewGuid().ToString();
                 while (true)
                 {
